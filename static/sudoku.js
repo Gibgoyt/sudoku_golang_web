@@ -13,10 +13,26 @@ async function generateNewPuzzle() {
       const cell = document.createElement("input");
       cell.type = "text";
       cell.className = "sudoku-cell";
-      cell.value = board[i][j] !== 0 ? board[i][j] : "";
+      if (board[i][j] !== 0) {
+        cell.value = board[i][j];
+        cell.readOnly = true;
+        cell.classList.add("prefilled");
+      } else {
+        cell.value = "";
+        cell.classList.add("user-cell");
+        cell.addEventListener("input", () => highlightMatches(cell.value));
+      }
+      cell.addEventListener("click", () => highlightMatches(cell.value));
       sudokuBoard.appendChild(cell);
     }
   }
+}
+
+function highlightMatches(value) {
+  const cells = document.getElementsByClassName("sudoku-cell");
+  for (const c of cells) c.classList.remove("highlight");
+  if (!value) return;
+  for (const c of cells) if (c.value === value) c.classList.add("highlight");
 }
 
 async function checkSolution() {

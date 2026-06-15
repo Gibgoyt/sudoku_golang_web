@@ -33,6 +33,24 @@ html {
   box-sizing: border-box;
 }
 
+/* Prefilled (puzzle-given) cells: black, bold, locked */
+.sudoku-cell.prefilled {
+  color: #000;
+  font-weight: bold;
+  background-color: #f0e6d2;
+}
+
+/* User-entered cells: blue */
+.sudoku-cell.user-cell {
+  color: #1a5fb4;
+  font-weight: 600;
+}
+
+/* Highlight all cells sharing the clicked value */
+.sudoku-cell.highlight {
+  background-color: #ffe082;
+}
+
 /* Thick black borders to delimit each 3x3 subgrid */
 .sudoku-cell:nth-child(9n + 3),
 .sudoku-cell:nth-child(9n + 6) {
