@@ -51,6 +51,12 @@ html {
   background-color: #ffe082;
 }
 
+/* Rule-violating user input: same digit in row/column/3x3 block */
+.sudoku-cell.conflict {
+  color: #d00;
+  background-color: #ffd5d5;
+}
+
 /* Thick black borders to delimit each 3x3 subgrid */
 .sudoku-cell:nth-child(9n + 3),
 .sudoku-cell:nth-child(9n + 6) {
