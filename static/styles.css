@@ -12,11 +12,11 @@ html {
   display: grid;
   grid-template-columns: repeat(9, 40px);
   grid-template-rows: repeat(9, 40px);
-  gap: 1px;
+  gap: 0;
   margin: 20px auto;
   padding: 10px;
   background-color: #865d36;
-  border: 2px solid #444;
+  border: 3px solid #000;
   box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
   border-radius: 8px;
 }
@@ -30,6 +30,28 @@ html {
   line-height: 40px;
   background-color: #fff;
   border: 1px solid #ccc;
+  box-sizing: border-box;
+}
+
+/* Thick black borders to delimit each 3x3 subgrid */
+.sudoku-cell:nth-child(9n + 3),
+.sudoku-cell:nth-child(9n + 6) {
+  border-right: 3px solid #000;
+}
+
+.sudoku-cell:nth-child(9n + 4),
+.sudoku-cell:nth-child(9n + 7) {
+  border-left: 3px solid #000;
+}
+
+.sudoku-cell:nth-child(n + 19):nth-child(-n + 27),
+.sudoku-cell:nth-child(n + 46):nth-child(-n + 54) {
+  border-bottom: 3px solid #000;
+}
+
+.sudoku-cell:nth-child(n + 28):nth-child(-n + 36),
+.sudoku-cell:nth-child(n + 55):nth-child(-n + 63) {
+  border-top: 3px solid #000;
 }
 
 /* Button styling */
@@ -60,6 +82,7 @@ button:active {
   #sudoku-board {
     grid-template-columns: repeat(9, 30px);
     grid-template-rows: repeat(9, 30px);
+    gap: 0;
     padding: 8px;
   }
 
