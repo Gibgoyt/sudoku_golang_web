@@ -20,7 +20,13 @@ async function generateNewPuzzle() {
       } else {
         cell.value = "";
         cell.classList.add("user-cell");
+        cell.maxLength = 1;
+        cell.addEventListener("beforeinput", (e) => {
+          if (e.data !== null && !/^[1-9]$/.test(e.data)) e.preventDefault();
+        });
         cell.addEventListener("input", () => {
+          const clean = cell.value.replace(/[^1-9]/g, "").slice(0, 1);
+          if (cell.value !== clean) cell.value = clean;
           highlightMatches(cell.value);
           updateConflicts();
         });
