@@ -150,12 +150,29 @@ async function checkSolution() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ board }),
   });
-  const isCorrect = await response.json();
-  if (isCorrect) {
+  const result = await response.json();
+
+  if (result.no_solution) {
+    setStatus("No solution stored for this puzzle yet.", true);
+    return;
+  }
+
+  if (result.correct) {
     setStatus("Correct! Puzzle solved!");
     await clearProgress(currentPuzzleId);
+    return;
+  }
+
+  // mark wrong cells red
+  const cells = document.getElementsByClassName("sudoku-cell");
+  if (result.wrong_cells && result.wrong_cells.length > 0) {
+    for (const [r, c] of result.wrong_cells) {
+      cells[r * 9 + c].classList.add("conflict");
+    }
+    const n = result.wrong_cells.length;
+    setStatus(`${n} cell${n === 1 ? "" : "s"} are incorrect.`, true);
   } else {
-    setStatus("Not quite right — keep going!", true);
+    setStatus("Not finished yet — keep going!", true);
   }
 }
 

@@ -240,16 +240,41 @@ func generateSudoku(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(currentBoard)
 }
 
+type CheckResult struct {
+	Correct    bool     `json:"correct"`
+	WrongCells [][2]int `json:"wrong_cells"`
+	NoSolution bool     `json:"no_solution,omitempty"`
+}
+
 func checkSolution(w http.ResponseWriter, r *http.Request) {
 	var userSolution SudokuBoard
 	_ = json.NewDecoder(r.Body).Decode(&userSolution)
 
 	w.Header().Set("Content-Type", "application/json")
 	if currentBoard.Solution == nil {
-		json.NewEncoder(w).Encode(false)
+		json.NewEncoder(w).Encode(CheckResult{NoSolution: true})
 		return
 	}
-	json.NewEncoder(w).Encode(compareBoards(currentBoard.Solution, userSolution.Board))
+
+	wrong := [][2]int{}
+	full := true
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			userVal := userSolution.Board[row][col]
+			if userVal == 0 {
+				full = false
+				continue
+			}
+			if userVal != currentBoard.Solution[row][col] {
+				wrong = append(wrong, [2]int{row, col})
+			}
+		}
+	}
+
+	json.NewEncoder(w).Encode(CheckResult{
+		Correct:    full && len(wrong) == 0,
+		WrongCells: wrong,
+	})
 }
 
 func randomPuzzleHandler(w http.ResponseWriter, r *http.Request) {
