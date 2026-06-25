@@ -1,4 +1,78 @@
-// ── Board rendering ──────────────────────────────────────────────
+// ── IndexedDB progress persistence ───────────────────────────────
+
+let _idb = null;
+
+function openIDB() {
+  if (_idb) return Promise.resolve(_idb);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("sudokuProgress", 1);
+    req.onupgradeneeded = (e) => {
+      e.target.result.createObjectStore("progress", { keyPath: "puzzleId" });
+    };
+    req.onsuccess = (e) => { _idb = e.target.result; resolve(_idb); };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function saveProgress(id, cells) {
+  if (id === null) return;
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("progress", "readwrite");
+    tx.objectStore("progress").put({ puzzleId: id, cells, savedAt: Date.now() });
+    tx.oncomplete = resolve;
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function loadProgress(id) {
+  if (id === null) return null;
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("progress", "readonly");
+    const req = tx.objectStore("progress").get(id);
+    req.onsuccess = (e) => resolve(e.target.result ? e.target.result.cells : null);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function clearProgress(id) {
+  if (id === null) return;
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("progress", "readwrite");
+    tx.objectStore("progress").delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function getAllProgressIds() {
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("progress", "readonly");
+    const req = tx.objectStore("progress").getAllKeys();
+    req.onsuccess = (e) => resolve(new Set(e.target.result));
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+// warm up IDB on page load
+openIDB().catch(() => {});
+
+// ── Board state ───────────────────────────────────────────────────
+
+let currentPuzzleId = null;
+let saveTimer = null;
+
+function scheduleAutoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveProgress(currentPuzzleId, getBoardState());
+  }, 500);
+}
+
+// ── Board rendering ───────────────────────────────────────────────
 
 function renderBoard(board) {
   const sudokuBoard = document.getElementById("sudoku-board");
@@ -25,10 +99,24 @@ function renderBoard(board) {
           if (cell.value !== clean) cell.value = clean;
           highlightMatches(cell.value);
           updateConflicts();
+          scheduleAutoSave();
         });
       }
       cell.addEventListener("click", () => highlightMatches(cell.value));
       sudokuBoard.appendChild(cell);
+    }
+  }
+  updateConflicts();
+}
+
+function restoreUserCells(cells) {
+  const domCells = document.getElementsByClassName("sudoku-cell");
+  for (let i = 0; i < 9; i++) {
+    for (let j = 0; j < 9; j++) {
+      const cell = domCells[i * 9 + j];
+      if (cell.classList.contains("user-cell") && cells[i][j] !== 0) {
+        cell.value = String(cells[i][j]);
+      }
     }
   }
   updateConflicts();
@@ -40,13 +128,19 @@ function setStatus(msg, isError) {
   el.className = isError ? "error" : "";
 }
 
-// ── API actions ───────────────────────────────────────────────────
+// ── API actions ────────────────────────────────────────────────────
 
 async function generateNewPuzzle() {
   const response = await fetch("/api/generate");
   const data = await response.json();
+  currentPuzzleId = "generated";
   renderBoard(data.board);
   setStatus("");
+  const saved = await loadProgress("generated");
+  if (saved) {
+    restoreUserCells(saved);
+    setStatus("Progress restored");
+  }
 }
 
 async function checkSolution() {
@@ -59,6 +153,7 @@ async function checkSolution() {
   const isCorrect = await response.json();
   if (isCorrect) {
     setStatus("Correct! Puzzle solved!");
+    await clearProgress(currentPuzzleId);
   } else {
     setStatus("Not quite right — keep going!", true);
   }
@@ -78,7 +173,7 @@ function getBoardState() {
   return board;
 }
 
-// ── Conflict / highlight logic ────────────────────────────────────
+// ── Conflict / highlight logic ─────────────────────────────────────
 
 function highlightMatches(value) {
   const cells = document.getElementsByClassName("sudoku-cell");
@@ -128,7 +223,7 @@ function updateConflicts() {
   }
 }
 
-// ── Modal ─────────────────────────────────────────────────────────
+// ── Modal ──────────────────────────────────────────────────────────
 
 function openModal() {
   document.getElementById("puzzle-modal").classList.remove("hidden");
@@ -150,7 +245,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
 });
 
-// ── Search ────────────────────────────────────────────────────────
+// ── Search ─────────────────────────────────────────────────────────
 
 let searchTimer = null;
 
@@ -173,7 +268,7 @@ async function runSearch() {
   renderResults(results);
 }
 
-function renderResults(results) {
+async function renderResults(results) {
   const container = document.getElementById("search-results");
   container.innerHTML = "";
 
@@ -184,6 +279,9 @@ function renderResults(results) {
     container.appendChild(empty);
     return;
   }
+
+  let progressIds = new Set();
+  try { progressIds = await getAllProgressIds(); } catch (_) {}
 
   for (const p of results) {
     const row = document.createElement("div");
@@ -209,6 +307,14 @@ function renderResults(results) {
     row.appendChild(meta);
     row.appendChild(badge);
     row.appendChild(sol);
+
+    if (progressIds.has(p.id)) {
+      const prog = document.createElement("span");
+      prog.className = "progress-badge";
+      prog.textContent = "▶ in progress";
+      row.appendChild(prog);
+    }
+
     container.appendChild(row);
   }
 }
@@ -220,10 +326,17 @@ async function loadPuzzleById(id) {
     return;
   }
   const data = await response.json();
+  currentPuzzleId = id;
   renderBoard(data.board);
   const hasSol = data.solution && data.solution.length > 0;
   setStatus(
     `Loaded #${data.id} · ${data.difficulty}${hasSol ? "" : " (no solution stored)"}`
   );
   closeModal();
+
+  const saved = await loadProgress(id);
+  if (saved) {
+    restoreUserCells(saved);
+    setStatus(`Progress restored for #${id} · ${data.difficulty}`);
+  }
 }
