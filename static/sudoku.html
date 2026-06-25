@@ -11,8 +11,22 @@
     <div id="sudoku-board">
       <!-- Sudoku cells will be dynamically generated here -->
     </div>
-    <button onclick="generateNewPuzzle()">Generate New Puzzle</button>
-    <button onclick="checkSolution()">Check Solution</button>
+
+    <div id="controls">
+      <button onclick="generateNewPuzzle()">Generate New Puzzle</button>
+      <button onclick="checkSolution()">Check Solution</button>
+      <div id="difficulty-group">
+        <select id="difficulty-select">
+          <option value="">-- Select Difficulty --</option>
+          <option value="extreme">Extreme</option>
+          <option value="expert">Expert</option>
+          <option value="master">Master</option>
+        </select>
+        <button onclick="loadByDifficulty()">Load Puzzle</button>
+      </div>
+    </div>
+
+    <div id="status-msg"></div>
 
     <script src="sudoku.js"></script>
   </body>

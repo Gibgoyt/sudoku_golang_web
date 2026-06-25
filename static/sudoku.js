@@ -1,12 +1,12 @@
-async function generateNewPuzzle() {
-  const response = await fetch("/api/generate");
-  const data = await response.json();
-  console.log(data); // For debugging
+function setStatus(msg, isError) {
+  const el = document.getElementById("status-msg");
+  el.textContent = msg;
+  el.className = isError ? "error" : "";
+}
 
-  // Populate the Sudoku board with the generated puzzle
-  const board = data.board;
+function renderBoard(board) {
   const sudokuBoard = document.getElementById("sudoku-board");
-  sudokuBoard.innerHTML = ""; // Clear previous board
+  sudokuBoard.innerHTML = "";
 
   for (let i = 0; i < 9; i++) {
     for (let j = 0; j < 9; j++) {
@@ -36,6 +36,33 @@ async function generateNewPuzzle() {
     }
   }
   updateConflicts();
+}
+
+async function generateNewPuzzle() {
+  const response = await fetch("/api/generate");
+  const data = await response.json();
+  renderBoard(data.board);
+  setStatus("");
+}
+
+async function loadByDifficulty() {
+  const difficulty = document.getElementById("difficulty-select").value;
+  if (!difficulty) {
+    setStatus("Please select a difficulty first.", true);
+    return;
+  }
+  const response = await fetch(`/api/puzzles/random?difficulty=${difficulty}`);
+  if (response.status === 404) {
+    setStatus(`No ${difficulty} puzzles in the database yet.`, true);
+    return;
+  }
+  if (!response.ok) {
+    setStatus("Failed to load puzzle.", true);
+    return;
+  }
+  const data = await response.json();
+  renderBoard(data.board);
+  setStatus(`Loaded ${difficulty} puzzle #${data.id}${data.solution ? "" : " (no solution stored yet)"}`);
 }
 
 function highlightMatches(value) {
@@ -90,20 +117,20 @@ async function checkSolution() {
   const board = getBoardState();
   const response = await fetch("/api/check", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ board }),
   });
-
   const isCorrect = await response.json();
-  alert(isCorrect ? "Solution is correct!" : "Solution is incorrect!");
+  if (isCorrect) {
+    setStatus("Correct! Puzzle solved!");
+  } else {
+    setStatus("Not quite right — keep going!", true);
+  }
 }
 
 function getBoardState() {
   const board = [];
   const cells = document.getElementsByClassName("sudoku-cell");
-
   for (let i = 0; i < 9; i++) {
     const row = [];
     for (let j = 0; j < 9; j++) {
@@ -112,6 +139,5 @@ function getBoardState() {
     }
     board.push(row);
   }
-
   return board;
 }
