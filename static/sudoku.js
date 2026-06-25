@@ -1,8 +1,4 @@
-function setStatus(msg, isError) {
-  const el = document.getElementById("status-msg");
-  el.textContent = msg;
-  el.className = isError ? "error" : "";
-}
+// ── Board rendering ──────────────────────────────────────────────
 
 function renderBoard(board) {
   const sudokuBoard = document.getElementById("sudoku-board");
@@ -38,6 +34,14 @@ function renderBoard(board) {
   updateConflicts();
 }
 
+function setStatus(msg, isError) {
+  const el = document.getElementById("status-msg");
+  el.textContent = msg;
+  el.className = isError ? "error" : "";
+}
+
+// ── API actions ───────────────────────────────────────────────────
+
 async function generateNewPuzzle() {
   const response = await fetch("/api/generate");
   const data = await response.json();
@@ -45,25 +49,36 @@ async function generateNewPuzzle() {
   setStatus("");
 }
 
-async function loadByDifficulty() {
-  const difficulty = document.getElementById("difficulty-select").value;
-  if (!difficulty) {
-    setStatus("Please select a difficulty first.", true);
-    return;
+async function checkSolution() {
+  const board = getBoardState();
+  const response = await fetch("/api/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ board }),
+  });
+  const isCorrect = await response.json();
+  if (isCorrect) {
+    setStatus("Correct! Puzzle solved!");
+  } else {
+    setStatus("Not quite right — keep going!", true);
   }
-  const response = await fetch(`/api/puzzles/random?difficulty=${difficulty}`);
-  if (response.status === 404) {
-    setStatus(`No ${difficulty} puzzles in the database yet.`, true);
-    return;
-  }
-  if (!response.ok) {
-    setStatus("Failed to load puzzle.", true);
-    return;
-  }
-  const data = await response.json();
-  renderBoard(data.board);
-  setStatus(`Loaded ${difficulty} puzzle #${data.id}${data.solution ? "" : " (no solution stored yet)"}`);
 }
+
+function getBoardState() {
+  const board = [];
+  const cells = document.getElementsByClassName("sudoku-cell");
+  for (let i = 0; i < 9; i++) {
+    const row = [];
+    for (let j = 0; j < 9; j++) {
+      const value = cells[i * 9 + j].value.trim();
+      row.push(value === "" ? 0 : parseInt(value));
+    }
+    board.push(row);
+  }
+  return board;
+}
+
+// ── Conflict / highlight logic ────────────────────────────────────
 
 function highlightMatches(value) {
   const cells = document.getElementsByClassName("sudoku-cell");
@@ -113,31 +128,102 @@ function updateConflicts() {
   }
 }
 
-async function checkSolution() {
-  const board = getBoardState();
-  const response = await fetch("/api/check", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ board }),
-  });
-  const isCorrect = await response.json();
-  if (isCorrect) {
-    setStatus("Correct! Puzzle solved!");
-  } else {
-    setStatus("Not quite right — keep going!", true);
+// ── Modal ─────────────────────────────────────────────────────────
+
+function openModal() {
+  document.getElementById("puzzle-modal").classList.remove("hidden");
+  document.getElementById("search-input").value = "";
+  document.querySelector('input[name="diff"][value=""]').checked = true;
+  runSearch();
+  setTimeout(() => document.getElementById("search-input").focus(), 50);
+}
+
+function closeModal() {
+  document.getElementById("puzzle-modal").classList.add("hidden");
+}
+
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById("puzzle-modal")) closeModal();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+});
+
+// ── Search ────────────────────────────────────────────────────────
+
+let searchTimer = null;
+
+function debouncedSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runSearch, 200);
+}
+
+async function runSearch() {
+  const q = document.getElementById("search-input").value.trim();
+  const difficulty = document.querySelector('input[name="diff"]:checked').value;
+
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (difficulty) params.set("difficulty", difficulty);
+
+  const response = await fetch("/api/search?" + params.toString());
+  if (!response.ok) return;
+  const results = await response.json();
+  renderResults(results);
+}
+
+function renderResults(results) {
+  const container = document.getElementById("search-results");
+  container.innerHTML = "";
+
+  if (!results || results.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "result-empty";
+    empty.textContent = "No puzzles found.";
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const p of results) {
+    const row = document.createElement("div");
+    row.className = "result-row";
+    row.onclick = () => loadPuzzleById(p.id);
+
+    const date = new Date(p.created_at + "Z").toLocaleDateString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+    });
+
+    const badge = document.createElement("span");
+    badge.className = `diff-badge diff-${p.difficulty}`;
+    badge.textContent = p.difficulty.charAt(0).toUpperCase() + p.difficulty.slice(1);
+
+    const meta = document.createElement("span");
+    meta.className = "result-meta";
+    meta.textContent = `#${p.id} · ${date}`;
+
+    const sol = document.createElement("span");
+    sol.className = p.has_solution ? "sol-yes" : "sol-no";
+    sol.textContent = p.has_solution ? "✓ solution" : "no solution";
+
+    row.appendChild(meta);
+    row.appendChild(badge);
+    row.appendChild(sol);
+    container.appendChild(row);
   }
 }
 
-function getBoardState() {
-  const board = [];
-  const cells = document.getElementsByClassName("sudoku-cell");
-  for (let i = 0; i < 9; i++) {
-    const row = [];
-    for (let j = 0; j < 9; j++) {
-      const value = cells[i * 9 + j].value.trim();
-      row.push(value === "" ? 0 : parseInt(value));
-    }
-    board.push(row);
+async function loadPuzzleById(id) {
+  const response = await fetch(`/api/puzzles/${id}`);
+  if (!response.ok) {
+    setStatus("Failed to load puzzle #" + id, true);
+    return;
   }
-  return board;
+  const data = await response.json();
+  renderBoard(data.board);
+  const hasSol = data.solution && data.solution.length > 0;
+  setStatus(
+    `Loaded #${data.id} · ${data.difficulty}${hasSol ? "" : " (no solution stored)"}`
+  );
+  closeModal();
 }

@@ -7,6 +7,8 @@ html {
   text-align: center;
 }
 
+/* ── Board ─────────────────────────────────────────────────────── */
+
 #sudoku-board {
   display: grid;
   grid-template-columns: repeat(9, 40px);
@@ -51,41 +53,32 @@ html {
   background-color: #ffd5d5;
 }
 
-/* 3x3 subgrid borders */
+/* 3×3 subgrid borders */
 .sudoku-cell:nth-child(9n + 3),
 .sudoku-cell:nth-child(9n + 6) {
   border-right: 3px solid #000;
 }
-
 .sudoku-cell:nth-child(9n + 4),
 .sudoku-cell:nth-child(9n + 7) {
   border-left: 3px solid #000;
 }
-
 .sudoku-cell:nth-child(n + 19):nth-child(-n + 27),
 .sudoku-cell:nth-child(n + 46):nth-child(-n + 54) {
   border-bottom: 3px solid #000;
 }
-
 .sudoku-cell:nth-child(n + 28):nth-child(-n + 36),
 .sudoku-cell:nth-child(n + 55):nth-child(-n + 63) {
   border-top: 3px solid #000;
 }
 
-/* Controls row */
+/* ── Controls ──────────────────────────────────────────────────── */
+
 #controls {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  align-items: center;
   gap: 8px;
   margin: 0 auto 10px;
-}
-
-#difficulty-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 button {
@@ -107,29 +100,8 @@ button:active {
   background-color: #a69080;
 }
 
-select {
-  padding: 12px 16px;
-  font-size: 18px;
-  cursor: pointer;
-  background-color: #93785b;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  appearance: none;
-  -webkit-appearance: none;
-  transition: background-color 0.3s ease;
-}
+/* ── Status message ────────────────────────────────────────────── */
 
-select:hover {
-  background-color: #ac8968;
-}
-
-select option {
-  background-color: #3e362e;
-  color: #fff;
-}
-
-/* Status message */
 #status-msg {
   color: #f0e6d2;
   font-size: 16px;
@@ -141,11 +113,190 @@ select option {
   color: #ff8a80;
 }
 
+/* ── Modal overlay ─────────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal {
+  background: #4a3f35;
+  border: 2px solid #865d36;
+  border-radius: 10px;
+  width: 420px;
+  max-width: 95vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #6b5040;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #f0e6d2;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #c8b49a;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.modal-close:hover {
+  background: #6b5040;
+  color: #fff;
+}
+
+/* ── Search input ──────────────────────────────────────────────── */
+
+.search-input {
+  margin: 14px 20px 0;
+  padding: 10px 14px;
+  font-size: 16px;
+  background: #3e362e;
+  border: 1px solid #6b5040;
+  border-radius: 6px;
+  color: #f0e6d2;
+  outline: none;
+  width: calc(100% - 40px);
+  box-sizing: border-box;
+}
+
+.search-input::placeholder {
+  color: #9a836e;
+}
+
+.search-input:focus {
+  border-color: #ac8968;
+}
+
+/* ── Difficulty radio filters ──────────────────────────────────── */
+
+#difficulty-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #6b5040;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #f0e6d2;
+  font-size: 15px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.radio-label input[type="radio"] {
+  accent-color: #ac8968;
+  cursor: pointer;
+}
+
+/* ── Search results ────────────────────────────────────────────── */
+
+#search-results {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px 0;
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  cursor: pointer;
+  border-bottom: 1px solid #3e362e;
+  transition: background 0.15s;
+}
+
+.result-row:hover {
+  background: #5a4a3c;
+}
+
+.result-meta {
+  flex: 1;
+  color: #f0e6d2;
+  font-size: 15px;
+}
+
+.diff-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.diff-extreme {
+  background: #7b1a1a;
+  color: #ffd5d5;
+}
+
+.diff-expert {
+  background: #5a3a00;
+  color: #ffe082;
+}
+
+.diff-master {
+  background: #1a3a5a;
+  color: #b3d4f5;
+}
+
+.sol-yes {
+  font-size: 13px;
+  color: #81c784;
+  white-space: nowrap;
+}
+
+.sol-no {
+  font-size: 13px;
+  color: #9a836e;
+  white-space: nowrap;
+}
+
+.result-empty {
+  padding: 20px;
+  color: #9a836e;
+  font-size: 15px;
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+
 @media (max-width: 600px) {
   #sudoku-board {
     grid-template-columns: repeat(9, 30px);
     grid-template-rows: repeat(9, 30px);
-    gap: 0;
     padding: 8px;
   }
 
@@ -156,8 +307,7 @@ select option {
     line-height: 30px;
   }
 
-  button,
-  select {
+  button {
     font-size: 15px;
     padding: 10px 16px;
   }

@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,13 @@ type SudokuBoard struct {
 	Solution   [][]int    `json:"solution"`
 	Difficulty Difficulty `json:"difficulty,omitempty"`
 	Completed  bool       `json:"completed"`
+}
+
+type PuzzleSummary struct {
+	ID          int    `json:"id"`
+	Difficulty  string `json:"difficulty"`
+	CreatedAt   string `json:"created_at"`
+	HasSolution bool   `json:"has_solution"`
 }
 
 // CellValue accepts an integer 0-9 or the string "-" (treated as 0/empty)
@@ -199,6 +207,87 @@ func randomPuzzleHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(puzzle)
 }
 
+func searchHandler(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	difficulty := strings.TrimSpace(r.URL.Query().Get("difficulty"))
+
+	query := `SELECT id, difficulty, created_at, solution IS NOT NULL AS has_solution FROM puzzles WHERE 1=1`
+	args := []interface{}{}
+
+	if difficulty != "" {
+		query += ` AND difficulty = ?`
+		args = append(args, difficulty)
+	}
+	if q != "" {
+		query += ` AND (CAST(id AS TEXT) LIKE ? OR created_at LIKE ?)`
+		like := "%" + q + "%"
+		args = append(args, like, like)
+	}
+	query += ` ORDER BY created_at DESC`
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		log.Printf("search query error: %v", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	results := []PuzzleSummary{}
+	for rows.Next() {
+		var s PuzzleSummary
+		if err := rows.Scan(&s.ID, &s.Difficulty, &s.CreatedAt, &s.HasSolution); err != nil {
+			continue
+		}
+		results = append(results, s)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
+func puzzleByIDHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	var boardJSON string
+	var solutionJSON sql.NullString
+	var difficulty string
+	err = db.QueryRow(
+		`SELECT difficulty, board, solution FROM puzzles WHERE id=?`, id,
+	).Scan(&difficulty, &boardJSON, &solutionJSON)
+	if err == sql.ErrNoRows {
+		http.Error(w, "puzzle not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Printf("db query error: %v", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+
+	var board [][]int
+	json.Unmarshal([]byte(boardJSON), &board)
+	var solution [][]int
+	if solutionJSON.Valid && solutionJSON.String != "" {
+		json.Unmarshal([]byte(solutionJSON.String), &solution)
+	}
+	puzzle := SudokuBoard{
+		ID:         id,
+		Board:      board,
+		Solution:   solution,
+		Difficulty: Difficulty(difficulty),
+		Completed:  false,
+	}
+	currentBoard = puzzle
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(puzzle)
+}
+
 func generateNewSudoku() SudokuBoard {
 	board := [][]int{
 		{5, 3, 0, 0, 7, 0, 0, 0, 0},
@@ -259,6 +348,8 @@ func main() {
 	router.HandleFunc("/api/generate", generateSudoku).Methods("GET")
 	router.HandleFunc("/api/check", checkSolution).Methods("POST")
 	router.HandleFunc("/api/puzzles/random", randomPuzzleHandler).Methods("GET")
+	router.HandleFunc("/api/puzzles/{id:[0-9]+}", puzzleByIDHandler).Methods("GET")
+	router.HandleFunc("/api/search", searchHandler).Methods("GET")
 
 	log.Println("Server running at http://localhost:8080/game/sudoku.html")
 	log.Fatal(http.ListenAndServe(":8080", router))

@@ -8,25 +8,51 @@
   </head>
 
   <body>
-    <div id="sudoku-board">
-      <!-- Sudoku cells will be dynamically generated here -->
-    </div>
+    <div id="sudoku-board"></div>
 
     <div id="controls">
       <button onclick="generateNewPuzzle()">Generate New Puzzle</button>
+      <button onclick="openModal()">Select Puzzle</button>
       <button onclick="checkSolution()">Check Solution</button>
-      <div id="difficulty-group">
-        <select id="difficulty-select">
-          <option value="">-- Select Difficulty --</option>
-          <option value="extreme">Extreme</option>
-          <option value="expert">Expert</option>
-          <option value="master">Master</option>
-        </select>
-        <button onclick="loadByDifficulty()">Load Puzzle</button>
-      </div>
     </div>
 
     <div id="status-msg"></div>
+
+    <!-- Puzzle selection modal -->
+    <div id="puzzle-modal" class="modal-overlay hidden" onclick="handleOverlayClick(event)">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Select Puzzle">
+        <div class="modal-header">
+          <h2>Select Puzzle</h2>
+          <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+        </div>
+
+        <input
+          type="text"
+          id="search-input"
+          class="search-input"
+          placeholder="Search by ID or date…"
+          oninput="debouncedSearch()"
+          autocomplete="off"
+        />
+
+        <div id="difficulty-filters">
+          <label class="radio-label">
+            <input type="radio" name="diff" value="" checked onchange="runSearch()" /> All
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="diff" value="extreme" onchange="runSearch()" /> Extreme
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="diff" value="expert" onchange="runSearch()" /> Expert
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="diff" value="master" onchange="runSearch()" /> Master
+          </label>
+        </div>
+
+        <div id="search-results"></div>
+      </div>
+    </div>
 
     <script src="sudoku.js"></script>
   </body>
