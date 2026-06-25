@@ -107,7 +107,68 @@ func initDB(path string) *sql.DB {
 	if err != nil {
 		log.Fatalf("create table: %v", err)
 	}
+	// migration: ignore error if column already exists
+	database.Exec(`ALTER TABLE puzzles ADD COLUMN multiple_solutions INTEGER NOT NULL DEFAULT 0`)
 	return database
+}
+
+func copyBoard(board [][]int) [][]int {
+	cp := make([][]int, 9)
+	for i := range board {
+		cp[i] = make([]int, 9)
+		copy(cp[i], board[i])
+	}
+	return cp
+}
+
+func isValid(board [][]int, row, col, num int) bool {
+	for i := 0; i < 9; i++ {
+		if board[row][i] == num || board[i][col] == num {
+			return false
+		}
+	}
+	br, bc := (row/3)*3, (col/3)*3
+	for r := br; r < br+3; r++ {
+		for c := bc; c < bc+3; c++ {
+			if board[r][c] == num {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// solveSudoku returns the first solution found and a count capped at 2.
+func solveSudoku(board [][]int) ([][]int, int) {
+	var first [][]int
+	count := 0
+	var bt func(b [][]int) bool
+	bt = func(b [][]int) bool {
+		for r := 0; r < 9; r++ {
+			for c := 0; c < 9; c++ {
+				if b[r][c] == 0 {
+					for num := 1; num <= 9; num++ {
+						if isValid(b, r, c, num) {
+							b[r][c] = num
+							if bt(b) {
+								return true // already capped at 2
+							}
+							b[r][c] = 0
+						}
+					}
+					return false
+				}
+			}
+		}
+		// board full — found a solution
+		count++
+		if first == nil {
+			first = copyBoard(b)
+		}
+		return count >= 2
+	}
+	bt(copyBoard(board))
+	return first, count
 }
 
 func handleInput(database *sql.DB) {
@@ -117,15 +178,39 @@ func handleInput(database *sql.DB) {
 	}
 	board := blocksToBoard(input.Blocks)
 	boardJSON, _ := json.Marshal(board)
-	result, err := database.Exec(
-		`INSERT INTO puzzles (difficulty, board) VALUES (?, ?)`,
-		string(input.Difficulty), string(boardJSON),
-	)
-	if err != nil {
-		log.Fatalf("insert failed: %v", err)
+
+	// duplicate check
+	var id int64
+	err := database.QueryRow(`SELECT id FROM puzzles WHERE board = ?`, string(boardJSON)).Scan(&id)
+	if err == sql.ErrNoRows {
+		result, err := database.Exec(
+			`INSERT INTO puzzles (difficulty, board) VALUES (?, ?)`,
+			string(input.Difficulty), string(boardJSON),
+		)
+		if err != nil {
+			log.Fatalf("insert failed: %v", err)
+		}
+		id, _ = result.LastInsertId()
+		fmt.Printf("Inserted puzzle ID=%d\n", id)
+	} else if err != nil {
+		log.Fatalf("duplicate check failed: %v", err)
+	} else {
+		fmt.Printf("Puzzle already exists as ID=%d — updating solution.\n", id)
 	}
-	id, _ := result.LastInsertId()
-	fmt.Printf("Inserted puzzle ID=%d\n", id)
+
+	solution, count := solveSudoku(board)
+	switch {
+	case count == 0:
+		fmt.Println("No solution found — puzzle may be invalid or unsolvable.")
+	case count == 1:
+		solJSON, _ := json.Marshal(solution)
+		database.Exec(`UPDATE puzzles SET solution=?, multiple_solutions=0 WHERE id=?`, string(solJSON), id)
+		fmt.Println("Solution found and stored.")
+	default:
+		solJSON, _ := json.Marshal(solution)
+		database.Exec(`UPDATE puzzles SET solution=?, multiple_solutions=1 WHERE id=?`, string(solJSON), id)
+		fmt.Println("Warning: multiple solutions found — first solution stored (multiple_solutions=1).")
+	}
 }
 
 func handleSolution(database *sql.DB) {
