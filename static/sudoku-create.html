@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Sudoku Puzzle</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <h1 id="page-title">Create New Puzzle</h1>
+
+    <div id="sudoku-board"></div>
+
+    <div id="numpad">
+      <button class="numpad-btn" onclick="numpadInput(1)">1</button>
+      <button class="numpad-btn" onclick="numpadInput(2)">2</button>
+      <button class="numpad-btn" onclick="numpadInput(3)">3</button>
+      <button class="numpad-btn" onclick="numpadInput(4)">4</button>
+      <button class="numpad-btn" onclick="numpadInput(5)">5</button>
+      <button class="numpad-btn" onclick="numpadInput(6)">6</button>
+      <button class="numpad-btn" onclick="numpadInput(7)">7</button>
+      <button class="numpad-btn" onclick="numpadInput(8)">8</button>
+      <button class="numpad-btn" onclick="numpadInput(9)">9</button>
+      <button class="numpad-btn clear-btn" onclick="numpadInput(0)">⌫ Clear</button>
+    </div>
+
+    <div id="difficulty-select">
+      <label class="radio-label">
+        <input type="radio" name="create-diff" value="extreme" checked /> Extreme
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="create-diff" value="expert" /> Expert
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="create-diff" value="master" /> Master
+      </label>
+    </div>
+
+    <div id="controls">
+      <button onclick="savePuzzle()">Save Puzzle</button>
+      <button onclick="clearGrid()">Clear Grid</button>
+      <button onclick="location.href='sudoku.html'">&#8592; Back to Game</button>
+    </div>
+
+    <div id="status-msg"></div>
+
+    <script src="sudoku-create.js"></script>
+  </body>
+</html>

@@ -305,6 +305,68 @@ button:active {
   white-space: nowrap;
 }
 
+/* ── Create page ───────────────────────────────────────────────── */
+
+#page-title {
+  color: #f0e6d2;
+  font-size: 26px;
+  font-weight: 600;
+  margin: 16px 0 0;
+}
+
+#difficulty-select {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 8px auto 10px;
+}
+
+#numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  gap: 6px;
+  margin: 0 auto 12px;
+  width: fit-content;
+}
+
+.numpad-btn {
+  width: 56px;
+  height: 56px;
+  font-size: 22px;
+  font-weight: bold;
+  padding: 0;
+  background-color: #93785b;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.numpad-btn:hover {
+  background-color: #ac8968;
+}
+
+.numpad-btn:active {
+  background-color: #a69080;
+}
+
+.numpad-btn.clear-btn {
+  grid-column: span 3;
+  width: 100%;
+  font-size: 17px;
+  font-weight: 600;
+  background-color: #7b4a35;
+}
+
+.numpad-btn.clear-btn:hover {
+  background-color: #9e5c42;
+}
+
+#status-msg.warning {
+  color: #ffb74d;
+}
+
 /* ── Responsive ────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {

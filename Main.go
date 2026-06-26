@@ -176,7 +176,14 @@ func handleInput(database *sql.DB) {
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
 		log.Fatalf("invalid input JSON: %v", err)
 	}
-	board := blocksToBoard(input.Blocks)
+	// treat each blocks[i] as row i (row-major input)
+	board := make([][]int, 9)
+	for i, row := range input.Blocks {
+		board[i] = make([]int, 9)
+		for j, v := range row {
+			board[i][j] = int(v)
+		}
+	}
 	boardJSON, _ := json.Marshal(board)
 
 	// duplicate check
@@ -232,6 +239,90 @@ func handleSolution(database *sql.DB) {
 		log.Fatalf("no puzzle found with ID=%d", input.ID)
 	}
 	fmt.Printf("Updated solution for puzzle ID=%d\n", input.ID)
+}
+
+type CreatePuzzleRequest struct {
+	Difficulty string  `json:"difficulty"`
+	Board      [][]int `json:"board"`
+}
+
+type CreatePuzzleResponse struct {
+	ID                int  `json:"id"`
+	Solved            bool `json:"solved"`
+	MultipleSolutions bool `json:"multiple_solutions"`
+}
+
+func createPuzzleHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req CreatePuzzleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	switch req.Difficulty {
+	case "extreme", "expert", "master":
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid difficulty"})
+		return
+	}
+
+	if len(req.Board) != 9 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "board must be 9 rows"})
+		return
+	}
+	for _, row := range req.Board {
+		if len(row) != 9 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "each row must have 9 cells"})
+			return
+		}
+	}
+
+	boardJSON, _ := json.Marshal(req.Board)
+
+	var existingID int64
+	err := db.QueryRow(`SELECT id FROM puzzles WHERE board = ?`, string(boardJSON)).Scan(&existingID)
+	if err == nil {
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "duplicate", "id": existingID})
+		return
+	}
+	if err != sql.ErrNoRows {
+		log.Printf("duplicate check: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "db error"})
+		return
+	}
+
+	result, err := db.Exec(
+		`INSERT INTO puzzles (difficulty, board) VALUES (?, ?)`,
+		req.Difficulty, string(boardJSON),
+	)
+	if err != nil {
+		log.Printf("insert puzzle: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "db error"})
+		return
+	}
+	id, _ := result.LastInsertId()
+
+	solution, count := solveSudoku(req.Board)
+	if count > 0 {
+		solJSON, _ := json.Marshal(solution)
+		db.Exec(`UPDATE puzzles SET solution=?, multiple_solutions=? WHERE id=?`,
+			string(solJSON), count > 1, id)
+	}
+
+	json.NewEncoder(w).Encode(CreatePuzzleResponse{
+		ID:                int(id),
+		Solved:            count > 0,
+		MultipleSolutions: count > 1,
+	})
 }
 
 func generateSudoku(w http.ResponseWriter, r *http.Request) {
@@ -455,6 +546,7 @@ func main() {
 
 	router := mux.NewRouter()
 	router.PathPrefix("/game/").Handler(http.StripPrefix("/game/", http.FileServer(http.Dir("./static/"))))
+	router.HandleFunc("/api/sudoku-create/puzzles", createPuzzleHandler).Methods("POST")
 	router.HandleFunc("/api/generate", generateSudoku).Methods("GET")
 	router.HandleFunc("/api/check", checkSolution).Methods("POST")
 	router.HandleFunc("/api/puzzles/random", randomPuzzleHandler).Methods("GET")
