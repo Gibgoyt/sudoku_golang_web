@@ -48,6 +48,10 @@ html {
   background-color: #fde8b4;
 }
 
+.sudoku-cell.match {
+  background-color: #ffe082;
+}
+
 .sudoku-cell.selected {
   background-color: #ffe082;
 }

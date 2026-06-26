@@ -197,6 +197,7 @@ function highlightSelected(cell) {
   for (const c of cells) {
     c.classList.remove("highlight");
     c.classList.remove("selected");
+    c.classList.remove("match");
   }
   if (!cell) return;
   const idx = Array.from(cells).indexOf(cell);
@@ -210,6 +211,11 @@ function highlightSelected(cell) {
     for (let c2 = boxCol; c2 < boxCol + 3; c2++)
       cells[r * 9 + c2].classList.add("highlight");
   cell.classList.add("selected");
+  if (cell.value) {
+    for (const c of cells) {
+      if (c !== cell && c.value === cell.value) c.classList.add("match");
+    }
+  }
 }
 
 function updateConflicts() {
