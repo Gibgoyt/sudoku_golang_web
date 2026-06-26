@@ -97,12 +97,12 @@ function renderBoard(board) {
         cell.addEventListener("input", () => {
           const clean = cell.value.replace(/[^1-9]/g, "").slice(0, 1);
           if (cell.value !== clean) cell.value = clean;
-          highlightMatches(cell.value);
+          highlightSelected(cell);
           updateConflicts();
           scheduleAutoSave();
         });
       }
-      cell.addEventListener("click", () => highlightMatches(cell.value));
+      cell.addEventListener("click", () => highlightSelected(cell));
       sudokuBoard.appendChild(cell);
     }
   }
@@ -192,11 +192,24 @@ function getBoardState() {
 
 // ── Conflict / highlight logic ─────────────────────────────────────
 
-function highlightMatches(value) {
+function highlightSelected(cell) {
   const cells = document.getElementsByClassName("sudoku-cell");
-  for (const c of cells) c.classList.remove("highlight");
-  if (!value) return;
-  for (const c of cells) if (c.value === value) c.classList.add("highlight");
+  for (const c of cells) {
+    c.classList.remove("highlight");
+    c.classList.remove("selected");
+  }
+  if (!cell) return;
+  const idx = Array.from(cells).indexOf(cell);
+  const row = Math.floor(idx / 9);
+  const col = idx % 9;
+  const boxRow = Math.floor(row / 3) * 3;
+  const boxCol = Math.floor(col / 3) * 3;
+  for (let r = 0; r < 9; r++) cells[r * 9 + col].classList.add("highlight");
+  for (let c2 = 0; c2 < 9; c2++) cells[row * 9 + c2].classList.add("highlight");
+  for (let r = boxRow; r < boxRow + 3; r++)
+    for (let c2 = boxCol; c2 < boxCol + 3; c2++)
+      cells[r * 9 + c2].classList.add("highlight");
+  cell.classList.add("selected");
 }
 
 function updateConflicts() {

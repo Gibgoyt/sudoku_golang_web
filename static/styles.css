@@ -45,6 +45,10 @@ html {
 }
 
 .sudoku-cell.highlight {
+  background-color: #fde8b4;
+}
+
+.sudoku-cell.selected {
   background-color: #ffe082;
 }
 
