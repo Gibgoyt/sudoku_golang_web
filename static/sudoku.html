@@ -10,10 +10,13 @@
   <body>
     <div id="sudoku-board"></div>
 
+    <div id="number-summary"></div>
+
     <div id="controls">
       <button onclick="generateNewPuzzle()">Generate New Puzzle</button>
       <button onclick="openModal()">Select Puzzle</button>
       <button onclick="checkSolution()">Check Solution</button>
+      <button id="note-mode-btn" onclick="toggleNoteMode()">Note Mode</button>
       <button onclick="location.href='sudoku-create.html'">&#43; Create Puzzle</button>
     </div>
 

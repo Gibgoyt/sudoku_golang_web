@@ -14,12 +14,13 @@ function openIDB() {
   });
 }
 
-async function saveProgress(id, cells) {
+async function saveProgress(id, values, notes) {
   if (id === null) return;
   const db = await openIDB();
+  const serializedNotes = notes.map(row => row.map(set => [...set]));
   return new Promise((resolve, reject) => {
     const tx = db.transaction("progress", "readwrite");
-    tx.objectStore("progress").put({ puzzleId: id, cells, savedAt: Date.now() });
+    tx.objectStore("progress").put({ puzzleId: id, values, notes: serializedNotes, savedAt: Date.now() });
     tx.oncomplete = resolve;
     tx.onerror = (e) => reject(e.target.error);
   });
@@ -31,7 +32,16 @@ async function loadProgress(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction("progress", "readonly");
     const req = tx.objectStore("progress").get(id);
-    req.onsuccess = (e) => resolve(e.target.result ? e.target.result.cells : null);
+    req.onsuccess = (e) => {
+      const result = e.target.result;
+      if (!result) { resolve(null); return; }
+      // backward compat: old format stored cells as a plain 2-D array
+      if (Array.isArray(result.cells)) {
+        resolve({ values: result.cells, notes: null });
+      } else {
+        resolve({ values: result.values, notes: result.notes });
+      }
+    };
     req.onerror = (e) => reject(e.target.error);
   });
 }
@@ -64,62 +74,149 @@ openIDB().catch(() => {});
 
 let currentPuzzleId = null;
 let saveTimer = null;
+let noteMode = false;
+let noteState = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+
+function resetNoteState() {
+  noteState = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+}
 
 function scheduleAutoSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    saveProgress(currentPuzzleId, getBoardState());
+    saveProgress(currentPuzzleId, getBoardState(), noteState);
   }, 500);
+}
+
+// ── Cell helpers ──────────────────────────────────────────────────
+
+function getCellInput(cellDiv) {
+  return cellDiv.querySelector(".cell-input");
+}
+
+function getCellValue(cellDiv) {
+  const input = getCellInput(cellDiv);
+  return input ? input.value.trim() : "";
+}
+
+function getCellCoords(cellDiv) {
+  const cells = document.getElementsByClassName("sudoku-cell");
+  const idx = Array.from(cells).indexOf(cellDiv);
+  return [Math.floor(idx / 9), idx % 9];
+}
+
+function renderCellNotes(cellDiv, row, col) {
+  const notes = noteState[row][col];
+  const overlay = cellDiv.querySelector(".cell-notes");
+  const slots = overlay.querySelectorAll(".note-slot");
+  for (let n = 1; n <= 9; n++) {
+    slots[n - 1].textContent = notes.has(n) ? n : "";
+  }
+  const val = getCellValue(cellDiv);
+  overlay.style.display = notes.size > 0 && !val ? "grid" : "none";
 }
 
 // ── Board rendering ───────────────────────────────────────────────
 
 function renderBoard(board) {
+  resetNoteState();
   const sudokuBoard = document.getElementById("sudoku-board");
   sudokuBoard.innerHTML = "";
 
   for (let i = 0; i < 9; i++) {
     for (let j = 0; j < 9; j++) {
-      const cell = document.createElement("input");
-      cell.type = "text";
-      cell.className = "sudoku-cell";
+      const cellDiv = document.createElement("div");
+      cellDiv.className = "sudoku-cell";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "cell-input";
+
+      // 3×3 notes overlay
+      const notesDiv = document.createElement("div");
+      notesDiv.className = "cell-notes";
+      notesDiv.style.display = "none";
+      for (let n = 1; n <= 9; n++) {
+        const slot = document.createElement("span");
+        slot.className = "note-slot";
+        slot.dataset.n = n;
+        notesDiv.appendChild(slot);
+      }
+
       if (board[i][j] !== 0) {
-        cell.value = board[i][j];
-        cell.readOnly = true;
-        cell.classList.add("prefilled");
+        input.value = board[i][j];
+        input.readOnly = true;
+        cellDiv.classList.add("prefilled");
       } else {
-        cell.value = "";
-        cell.classList.add("user-cell");
-        cell.maxLength = 1;
-        cell.addEventListener("beforeinput", (e) => {
-          if (e.data !== null && !/^[1-9]$/.test(e.data)) e.preventDefault();
+        cellDiv.classList.add("user-cell");
+        input.maxLength = 1;
+
+        input.addEventListener("beforeinput", (e) => {
+          if (e.data === null) return; // allow delete / backspace
+          if (!/^[1-9]$/.test(e.data)) { e.preventDefault(); return; }
+          // in note mode, don't overwrite a cell that already has a value
+          if (noteMode && input.value !== "") e.preventDefault();
         });
-        cell.addEventListener("input", () => {
-          const clean = cell.value.replace(/[^1-9]/g, "").slice(0, 1);
-          if (cell.value !== clean) cell.value = clean;
-          highlightSelected(cell);
-          updateConflicts();
-          scheduleAutoSave();
+
+        input.addEventListener("input", () => {
+          if (noteMode) {
+            const typed = input.value.replace(/[^1-9]/g, "").slice(-1);
+            input.value = "";
+            if (typed) {
+              const n = parseInt(typed);
+              if (noteState[i][j].has(n)) noteState[i][j].delete(n);
+              else noteState[i][j].add(n);
+              renderCellNotes(cellDiv, i, j);
+              updateNoteConflicts();
+            }
+            scheduleAutoSave();
+          } else {
+            const clean = input.value.replace(/[^1-9]/g, "").slice(0, 1);
+            if (input.value !== clean) input.value = clean;
+            if (clean) {
+              noteState[i][j].clear();
+              renderCellNotes(cellDiv, i, j);
+            }
+            highlightSelected(cellDiv);
+            updateConflicts();
+            updateNoteConflicts();
+            updateSummary();
+            scheduleAutoSave();
+          }
         });
       }
-      cell.addEventListener("click", () => highlightSelected(cell));
-      sudokuBoard.appendChild(cell);
+
+      cellDiv.addEventListener("click", () => highlightSelected(cellDiv));
+
+      cellDiv.appendChild(input);
+      cellDiv.appendChild(notesDiv);
+      sudokuBoard.appendChild(cellDiv);
     }
   }
   updateConflicts();
+  updateNoteConflicts();
+  updateSummary();
 }
 
-function restoreUserCells(cells) {
+function restoreUserCells({ values, notes }) {
   const domCells = document.getElementsByClassName("sudoku-cell");
   for (let i = 0; i < 9; i++) {
     for (let j = 0; j < 9; j++) {
-      const cell = domCells[i * 9 + j];
-      if (cell.classList.contains("user-cell") && cells[i][j] !== 0) {
-        cell.value = String(cells[i][j]);
+      const cellDiv = domCells[i * 9 + j];
+      if (!cellDiv.classList.contains("user-cell")) continue;
+      const input = getCellInput(cellDiv);
+      if (values[i][j] !== 0) {
+        input.value = String(values[i][j]);
+      }
+      if (notes && notes[i] && notes[i][j] && notes[i][j].length > 0) {
+        noteState[i][j] = new Set(notes[i][j]);
+        renderCellNotes(cellDiv, i, j);
       }
     }
   }
   updateConflicts();
+  updateNoteConflicts();
+  updateSummary();
 }
 
 function setStatus(msg, isError) {
@@ -146,7 +243,7 @@ async function generateNewPuzzle() {
 async function checkSolution() {
   const userCells = document.getElementsByClassName("user-cell");
   for (const cell of userCells) {
-    if (!cell.value.trim()) {
+    if (!getCellValue(cell)) {
       setStatus("Incomplete — fill all cells before checking.", true);
       return;
     }
@@ -171,7 +268,6 @@ async function checkSolution() {
     return;
   }
 
-  // mark wrong cells red
   const cells = document.getElementsByClassName("sudoku-cell");
   if (result.wrong_cells && result.wrong_cells.length > 0) {
     for (const [r, c] of result.wrong_cells) {
@@ -190,7 +286,7 @@ function getBoardState() {
   for (let i = 0; i < 9; i++) {
     const row = [];
     for (let j = 0; j < 9; j++) {
-      const value = cells[i * 9 + j].value.trim();
+      const value = getCellValue(cells[i * 9 + j]);
       row.push(value === "" ? 0 : parseInt(value));
     }
     board.push(row);
@@ -198,17 +294,50 @@ function getBoardState() {
   return board;
 }
 
-// ── Conflict / highlight logic ─────────────────────────────────────
+// ── Number summary ─────────────────────────────────────────────────
 
-function highlightSelected(cell) {
+function updateSummary() {
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+  const cells = document.getElementsByClassName("sudoku-cell");
+  for (const cell of cells) {
+    const v = parseInt(getCellValue(cell));
+    if (v >= 1 && v <= 9) counts[v]++;
+  }
+  const container = document.getElementById("number-summary");
+  container.innerHTML = "";
+  for (let n = 1; n <= 9; n++) {
+    if (counts[n] >= 9) continue;
+    const remaining = 9 - counts[n];
+    const card = document.createElement("div");
+    card.className = "num-card";
+    card.innerHTML = `<span class="num-main">${n}</span><span class="num-count">${remaining}</span>`;
+    card.addEventListener("click", () => highlightAllOfNumber(n));
+    container.appendChild(card);
+  }
+}
+
+function highlightAllOfNumber(n) {
   const cells = document.getElementsByClassName("sudoku-cell");
   for (const c of cells) {
-    c.classList.remove("highlight");
-    c.classList.remove("selected");
-    c.classList.remove("match");
+    c.classList.remove("highlight", "selected", "match");
+    c.querySelectorAll(".note-slot").forEach(s => s.classList.remove("note-match"));
   }
-  if (!cell) return;
-  const idx = Array.from(cells).indexOf(cell);
+  const str = String(n);
+  for (const c of cells) {
+    if (getCellValue(c) === str) c.classList.add("match");
+  }
+}
+
+// ── Conflict / highlight logic ─────────────────────────────────────
+
+function highlightSelected(cellDiv) {
+  const cells = document.getElementsByClassName("sudoku-cell");
+  for (const c of cells) {
+    c.classList.remove("highlight", "selected", "match");
+    c.querySelectorAll(".note-slot").forEach(s => s.classList.remove("note-match"));
+  }
+  if (!cellDiv) return;
+  const idx = Array.from(cells).indexOf(cellDiv);
   const row = Math.floor(idx / 9);
   const col = idx % 9;
   const boxRow = Math.floor(row / 3) * 3;
@@ -218,10 +347,17 @@ function highlightSelected(cell) {
   for (let r = boxRow; r < boxRow + 3; r++)
     for (let c2 = boxCol; c2 < boxCol + 3; c2++)
       cells[r * 9 + c2].classList.add("highlight");
-  cell.classList.add("selected");
-  if (cell.value) {
+  cellDiv.classList.add("selected");
+  const val = getCellValue(cellDiv);
+  if (val) {
     for (const c of cells) {
-      if (c !== cell && c.value === cell.value) c.classList.add("match");
+      if (c !== cellDiv && getCellValue(c) === val) c.classList.add("match");
+    }
+    // highlight note slots that contain the selected number
+    for (const c of cells) {
+      c.querySelectorAll(".note-slot").forEach(slot => {
+        if (slot.textContent === val) slot.classList.add("note-match");
+      });
     }
   }
 }
@@ -230,7 +366,7 @@ function updateConflicts() {
   const cells = document.getElementsByClassName("sudoku-cell");
   for (const c of cells) c.classList.remove("conflict");
 
-  const get = (r, c) => cells[r * 9 + c].value.trim();
+  const get = (r, c) => getCellValue(cells[r * 9 + c]);
   const markUser = (r, c) => {
     const cell = cells[r * 9 + c];
     if (cell.classList.contains("user-cell")) cell.classList.add("conflict");
@@ -265,6 +401,50 @@ function updateConflicts() {
       checkGroup(pos);
     }
   }
+}
+
+function updateNoteConflicts() {
+  const cells = document.getElementsByClassName("sudoku-cell");
+  for (const c of cells) {
+    c.querySelectorAll(".note-slot").forEach(s => s.classList.remove("note-conflict"));
+  }
+  for (let r = 0; r < 9; r++) {
+    for (let col = 0; col < 9; col++) {
+      const val = getCellValue(cells[r * 9 + col]);
+      if (!val) continue;
+      const n = parseInt(val);
+      for (let c2 = 0; c2 < 9; c2++) {
+        if (c2 !== col) markNoteSlotConflict(cells[r * 9 + c2], n);
+      }
+      for (let r2 = 0; r2 < 9; r2++) {
+        if (r2 !== r) markNoteSlotConflict(cells[r2 * 9 + col], n);
+      }
+      const br = Math.floor(r / 3) * 3;
+      const bc = Math.floor(col / 3) * 3;
+      for (let i = br; i < br + 3; i++) {
+        for (let j = bc; j < bc + 3; j++) {
+          if (i !== r || j !== col) markNoteSlotConflict(cells[i * 9 + j], n);
+        }
+      }
+    }
+  }
+}
+
+function markNoteSlotConflict(cellDiv, n) {
+  cellDiv.querySelectorAll(".note-slot").forEach(slot => {
+    if (slot.textContent !== "" && parseInt(slot.textContent) === n) {
+      slot.classList.add("note-conflict");
+    }
+  });
+}
+
+// ── Note mode toggle ───────────────────────────────────────────────
+
+function toggleNoteMode() {
+  noteMode = !noteMode;
+  const btn = document.getElementById("note-mode-btn");
+  btn.classList.toggle("note-mode-active", noteMode);
+  btn.textContent = noteMode ? "Note Mode: ON" : "Note Mode";
 }
 
 // ── Modal ──────────────────────────────────────────────────────────
