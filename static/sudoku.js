@@ -144,6 +144,14 @@ async function generateNewPuzzle() {
 }
 
 async function checkSolution() {
+  const userCells = document.getElementsByClassName("user-cell");
+  for (const cell of userCells) {
+    if (!cell.value.trim()) {
+      setStatus("Incomplete — fill all cells before checking.", true);
+      return;
+    }
+  }
+
   const board = getBoardState();
   const response = await fetch("/api/check", {
     method: "POST",
