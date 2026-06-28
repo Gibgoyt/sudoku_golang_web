@@ -332,7 +332,7 @@ async function renderResults(results) {
     row.className = "result-row";
     row.onclick = () => loadPuzzleById(p.id);
 
-    const date = new Date(p.created_at + "Z").toLocaleDateString("en-US", {
+    const date = new Date(p.created_at).toLocaleDateString("en-US", {
       month: "short", day: "numeric", year: "numeric",
     });
 
