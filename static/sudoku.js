@@ -440,6 +440,21 @@ function markNoteSlotConflict(cellDiv, n) {
 
 // ── Note mode toggle ───────────────────────────────────────────────
 
+function eraseAllNotes() {
+  resetNoteState();
+  const cells = document.getElementsByClassName("sudoku-cell");
+  for (let i = 0; i < 9; i++) {
+    for (let j = 0; j < 9; j++) {
+      const cellDiv = cells[i * 9 + j];
+      if (cellDiv.classList.contains("user-cell")) {
+        renderCellNotes(cellDiv, i, j);
+      }
+    }
+  }
+  updateNoteConflicts();
+  scheduleAutoSave();
+}
+
 function toggleNoteMode() {
   noteMode = !noteMode;
   const btn = document.getElementById("note-mode-btn");
